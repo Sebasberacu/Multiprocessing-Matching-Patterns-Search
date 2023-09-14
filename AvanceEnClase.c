@@ -1,4 +1,4 @@
-pid_t processes [PROCESS_POOL_SIZE];
+#define pid_t processes [PROCESS_POOL_SIZE];
 
 void createProcesses(){
     for (int i=0; i < PROCESS_POOL_SIZE; i++){
