@@ -1,4 +1,15 @@
-#define pid_t processes [PROCESS_POOL_SIZE];
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+#define READING_BUFFER 8192
+#define PROCESS_POOL_SIZE 3
+int processes[PROCESS_POOL_SIZE];
+
 
 void createProcesses(){
     for (int i=0; i < PROCESS_POOL_SIZE; i++){
@@ -19,13 +30,16 @@ struct message {
 
 int readFile(int processID){
     printf("Child process %d READING.\n", processID);
-    //sleep(3);
+    sleep(2);
+    printf("Child process %d ENDED READING.\n", processID);
+
     return 10;
 }
 
 void searchPattern(int processID){
     printf("Child process %d SEARCHING.\n", processID);
-    //sleep(1);
+    sleep(1);
+    printf("Child process %d FINISHED SEARCHING.\n", processID);
 }
 
 int main(int argc, char *argv[]){
