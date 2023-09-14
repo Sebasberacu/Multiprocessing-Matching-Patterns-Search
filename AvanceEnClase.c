@@ -37,7 +37,7 @@ int readFile(int processID){
 
 void searchPattern(int processID){
     printf("Child process %d SEARCHING.\n", processID);
-    sleep(1);
+    sleep(2);
     printf("Child process %d FINISHED SEARCHING.\n", processID);
 }
 
