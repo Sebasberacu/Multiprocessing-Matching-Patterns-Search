@@ -29,8 +29,7 @@ struct message {
 } msg;
 
 int readFile(int processID){
-    printf("Child process %d READING.\n", processID);
-    sleep(2);
+    printf("Child process %d STARTS READING.\n", processID);
     printf("Child process %d ENDED READING.\n", processID);
 
     return 10;
