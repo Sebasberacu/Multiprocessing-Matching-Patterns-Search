@@ -10,7 +10,12 @@
 #define PROCESS_POOL_SIZE 3
 int processes[PROCESS_POOL_SIZE];
 
-
+/** Funcion responsable de la creación de los hijos.
+ * El proceso principal guarda los PID de los hijos un arreglo global.
+ * Params: No tiene.
+ * Returns: No retorna.
+ * 
+*/
 void createProcesses(){
     for (int i=0; i < PROCESS_POOL_SIZE; i++){
         pid_t childProcess = fork();
@@ -62,7 +67,7 @@ int main(int argc, char *argv[]){
         msgsnd(msqid, &msg, 8000, IPC_NOWAIT); // Manda a leer al siguiente
         searchPattern(pidHijo);
     } 
-
+    //Solo el padre llega aquí.
     int contadorHijos = 0;
     struct message msgParent;
     msgParent.type = (int)processes[contadorHijos];
@@ -70,8 +75,7 @@ int main(int argc, char *argv[]){
     
     do{
         msgrcv(msqid, &msgParent, sizeof(msgParent), 1, IPC_NOWAIT); // Ya leyo porque type=1
-        contadorHijos++;
-        msgParent.type = (int)processes[contadorHijos];
+        msgParent.type = (int)processes[contadorHijos+1];
         msgsnd(msqid, &msgParent, sizeof(msgParent), IPC_NOWAIT);
         if (contadorHijos + 1 == PROCESS_POOL_SIZE){
             contadorHijos = 0;
