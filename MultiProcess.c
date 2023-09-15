@@ -51,7 +51,7 @@ int main(int argc, char *argv[]){
     key_t msqkey = 999;
     int msqid = msgget(msqkey, IPC_CREAT | 0666); // Crear la cola de mensajes
 
-    FILE * file = fopen("sample.txt", "r"); // abrir el archivo
+    FILE * file = fopen("Texto.txt", "r"); // abrir el archivo
     fseek(file, 0, SEEK_SET); // lo posiciono al principio
     long fileSize = ftell(file);
 
