@@ -1,43 +1,36 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <sys/ipc.h>
-#include <sys/msg.h>
-#include <sys/wait.h>
-#include <unistd.h>
 
-#define READING_BUFFER 8192
-#define PROCESS_POOL_SIZE 3
+#define BLOCK_SIZE 8192 // Tamaño del bloque en bytes (8KB)
 
 int main() {
-    char ch;
+    FILE *archivo;
+    char *nombreArchivo = "DonQuijote.txt"; // Reemplaza con el nombre de tu archivo
 
-    // Opening file in reading mode
-    FILE* ptr = fopen("Texto.txt", "r");
-    fseek(ptr, 0, SEEK_SET);  // Posiciona el puntero en la posición de inicio
-                              // que le toque
-
-    if (NULL == ptr) {  // Validación si no abre
-        printf("file can't be opened \n");
+    archivo = fopen(nombreArchivo, "rb");
+    if (archivo == NULL) {
+        perror("Error al abrir el archivo");
+        return 1;
     }
 
-    // Printing what is written in file
-    // character by character using loop.
-    do {
-        ch = fgetc(ptr);
-        printf("%c", ch);
+    char buffer[BLOCK_SIZE];
+    size_t bytesLeidos;
+    long posicionUltimoSalto = -1; // Inicializamos con -1, que indica que no se ha encontrado un salto de línea
 
-        if (ch == '\n') {
-            printf("Estoy en la posicion %ld\n\n", ftell(ptr));
+    while ((bytesLeidos = fread(buffer, 1, BLOCK_SIZE, archivo)) > 0) {
+        // Busca el último salto de línea en el bloque actual
+        for (size_t i = bytesLeidos - 1; i >= 0; i--) {
+            if (buffer[i] == '\n') {
+                // Calcula la posición en el archivo sumando la posición en el bloque y la posición actual en el archivo
+                posicionUltimoSalto = ftell(archivo) - (bytesLeidos - i);
+                break;
+            }
         }
-
-        // Checking if character is not EOF.
-        // If it is EOF stop reading.
-    } while (ch != EOF);
-
-    // Closing the file
-    fclose(ptr);
-
-    // manda el mensaje: La posicion, posicion por linea, string("")
+        // Si se encontró el último salto de línea en este bloque, guarda su posición en el archivo
+        if (posicionUltimoSalto != -1) {
+            printf("Posición del último salto de línea en el archivo: %ld\n", posicionUltimoSalto);
+        }
+    }
+    fclose(archivo);
     return 0;
 }
