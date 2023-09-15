@@ -10,6 +10,12 @@
 #define PROCESS_POOL_SIZE 3
 int processes[PROCESS_POOL_SIZE];
 
+struct message {
+    int type; // Message type
+    int filePosition;
+    char matchesFound[READING_BUFFER];  // Lines that matched regex pattern
+} msg;
+
 /** Funcion responsable de la creación de los hijos.
  * El proceso principal guarda los PID de los hijos un arreglo global.
  * Params: No tiene.
@@ -26,12 +32,6 @@ void createProcesses(){
         }
     }
 }
-
-struct message {
-    int type; // Message type
-    int filePosition;
-    char matchesFound[READING_BUFFER];  // Lines that matched regex pattern
-} msg;
 
 int readFile(int processID){
     printf("Child process %d STARTS READING.\n", processID);
@@ -55,47 +55,41 @@ int main(int argc, char *argv[]){
     fseek(file, 0, SEEK_SET); // lo posiciono al principio
     long fileSize = ftell(file);
 
-    pid_t pidPadre = getpid();
+    pid_t parentPid = getpid();
     createProcesses();
-    pid_t pidHijo = getpid();
+    pid_t childPid = getpid();
 
-    while(pidHijo != pidPadre){ // Solo los hijos entran
-        msgrcv(msqid, &msg, 8000, (int)pidHijo, IPC_NOWAIT); // mensaje para empezar a leer
-        
-        msg.filePosition = readFile(pidHijo);
+    while(childPid != parentPid){ // Solo los hijos entran
+        // mensaje para empezar a leer
+        msgrcv(msqid, &msg, 1024,
+              (int)childPid, // recibe tipo = su pid
+              IPC_NOWAIT);
+        msg.filePosition = readFile(childPid);
         msg.type = 1; // 1 para que solo reciba el padre
-        msgsnd(msqid, &msg, 8000, IPC_NOWAIT); // Manda a leer al siguiente
-        searchPattern(pidHijo);
+        msgsnd(msqid, &msg, 1024, IPC_NOWAIT); // Manda a leer al siguiente
+        searchPattern(childPid);
     } 
+    
     //Solo el padre llega aquí.
-    int contadorHijos = 0;
-    struct message msgParent;
-    msgParent.type = (int)processes[contadorHijos];
-    msgsnd(msqid, &msgParent, sizeof(msgParent), IPC_NOWAIT); // Manda a leer al primero
-    
+    int childCounter = 0;
+    //struct message msg;
+    msg.type = (int)processes[childCounter];
+    msgsnd(msqid, &msg, 1024, IPC_NOWAIT); // Manda a leer al primero
+
     do{
-        msgrcv(msqid, &msgParent, sizeof(msgParent), 1, IPC_NOWAIT); // Ya leyo porque type=1
-        msgParent.type = (int)processes[contadorHijos+1];
-        msgsnd(msqid, &msgParent, sizeof(msgParent), IPC_NOWAIT);
-        if (contadorHijos + 1 == PROCESS_POOL_SIZE){
-            contadorHijos = 0;
+        msgrcv(msqid, &msg, 1024,
+              1,
+              IPC_NOWAIT); // Ya leyo porque type=1
+        msg.type = (int)processes[childCounter+1];
+        msgsnd(msqid, &msg, 1024, IPC_NOWAIT);
+        if (childCounter + 1 == PROCESS_POOL_SIZE){ // Reutilizar procesos hijos, si ya se utilizaron todos
+            childCounter = 0;
         }
-    }while(1); 
+    }while((long)msg.filePosition <= fileSize); // mientras no se haya terminado de leer
     
-    // Eliminar la cola de mensajes
-    msgctl(msqid, IPC_RMID, NULL);
+
+    fclose(file); // Cerrar archivo
+    msgctl(msqid, IPC_RMID, NULL);  // Eliminar la cola de mensajes
 
     return 0;
-    
-    
-
-    // while (no se termine de leer){
-    //     struct mensajerecibidoPadre
-    //     esperando a que le manden un mensaje (mensajerecibidoPadre)
-    //     contadorHijosUsados++;
-    //     envia un mensaje el siguiente en procesos (con contadorHijosUsados)
-    //     if (contadorHijos+1 == POOL_SIZE){
-    //         contadorHijosUsados = 0;
-    //     }
-    // }
 }
