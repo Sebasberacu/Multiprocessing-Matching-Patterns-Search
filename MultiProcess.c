@@ -130,26 +130,20 @@ int main(int argc, char *argv[]) {
 
     // Solo el padre llega aquí.
     int childCounter = 0;
-    struct message msg;
+    //struct message msg;
     msg.type = (int)processes[childCounter];
     msg.filePosition = 0;
     msgsnd(msqid, &msg, 1024, IPC_NOWAIT);  // Manda a leer al primero
 
     do {
-        msgrcv(msqid, &msg, 1024, 1,
-               IPC_NOWAIT);  // Ya leyo porque type=1
+        msgrcv(msqid, &msg, 1024, 1, IPC_NOWAIT);  // Ya leyo porque type=1
         msg.type = (int)processes[childCounter + 1];
         msgsnd(msqid, &msg, 1024, IPC_NOWAIT);
-        if (childCounter + 1 ==
-            PROCESS_POOL_SIZE) {  // Reutilizar procesos hijos, si ya se
-                                  // utilizaron todos
+        if (childCounter + 1 == PROCESS_POOL_SIZE) {  // Reutilizar procesos hijos,se utilizaron todos
             childCounter = 0;
         }
-        //msgrcv(msqid, &msg, 1024, 2,
-               //IPC_NOWAIT);  // Espera a que algun hijo termine de procesar
 
-    } while ((long)msg.filePosition <=
-             fileSize);  // mientras no se haya terminado de leer
+    } while ((long)msg.filePosition <= fileSize);  // mientras no se haya terminado de leer
 
     fclose(file);                   // Cerrar archivo
     msgctl(msqid, IPC_RMID, NULL);  // Eliminar la cola de mensajes
