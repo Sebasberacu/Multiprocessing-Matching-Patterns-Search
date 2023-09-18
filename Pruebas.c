@@ -1,29 +1,49 @@
+#include <regex.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-#define READING_BUFFER 8192  // Tamaño del bloque en bytes (8KB)
+#define READING_BUFFER 8192  //8K
 char buffer[READING_BUFFER];
+int lineCounter = 1;  // Contador de líneas
 
 /** Funcion que procesa el texto leido en el buffer.
- *  Parametros: no tiene.
+ *  Parametros:
+ *    - regexStr: La expresión regular a buscar en las líneas.
  *  Retorna: no retorna.
-*/
-void processBuffer(){
+ */
+void processBuffer(const char *regexStr) {
+    printf("Child process %d STARTS PROCESSING.\n", getpid());
     char *ptr = buffer;
-    while (ptr < buffer + READING_BUFFER) {//Desde el inicio del array hasta el final
+    regex_t regex;
+    if (regcomp(&regex, regexStr, REG_EXTENDED) != 0) {
+        fprintf(stderr, "Error al compilar la expresión regular.\n");
+        exit(1);
+    }
+    while (ptr < buffer + READING_BUFFER) {
         char *newline = strchr(ptr, '\n');
         if (newline != NULL) {
             size_t lineLength = newline - ptr;
-            printf("Linea: %.*s\n", (int)lineLength, ptr);
+            char line[lineLength + 1];
+            strncpy(line, ptr, lineLength);
+            line[lineLength] = '\0';
+            if (regexec(&regex, line, 0, NULL, 0) == 0)
+                printf("Coincidencia en la línea %d: %s\n", lineCounter, line);
             ptr = newline + 1;
+            lineCounter++;
         } else {
-            printf("Linea: %s\n", ptr);
+            char line[READING_BUFFER];
+            strcpy(line, ptr);
+            if (regexec(&regex, line, 0, NULL, 0) == 0)
+                printf("Coincidencia en la línea %d: %s\n", lineCounter, line);
+
             break;
         }
     }
-    memset(buffer, 0, READING_BUFFER);//Limpia el buffer
+    regfree(&regex);
+    memset(buffer, 0, READING_BUFFER);
+    printf("Child process %d ENDED PROCESSING.\n", getpid());
 }
 
 long readFile(pid_t processID, long lastPosition, char *nombreArchivo) {
@@ -60,17 +80,18 @@ long readFile(pid_t processID, long lastPosition, char *nombreArchivo) {
             }
         }
     fclose(archivo);
-    printf("\nChild process %d ENDED READING.\n", processID);
+    printf("Child process %d ENDED READING.\n", processID);
     return posicionUltimoSalto;  //-1 si no encontro ultimo salto de linea
 }
 int main() {
-    //Ejemplo de como se procesa el archivo por bloques de 8K.
+    // Ejemplo de como se procesa el archivo por bloques de 8K.
     pid_t pid = getpid();
     long pos = readFile(pid, 0, "Texto.txt");
-    processBuffer();
+    processBuffer("graciosa");
     long pos2 = readFile(pid, pos, "Texto.txt");
-    processBuffer();
+    processBuffer(
+        "graciosa");
     long pos3 = readFile(pid, pos2, "Texto.txt");
-    processBuffer();
+    processBuffer("graciosa");
     return 0;
 }
