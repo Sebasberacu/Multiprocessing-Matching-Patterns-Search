@@ -12,6 +12,7 @@
 
 #define READING_BUFFER 8192
 #define PROCESS_POOL_SIZE 3
+char buffer[READING_BUFFER];
 
 long processes[PROCESS_POOL_SIZE];
 
@@ -58,18 +59,42 @@ int isQueueEmpty(int msqid) {
     return (buf.msg_qnum == 0) ? 1 : 0;
 }
 
-int readFile(int processID) {
-    printf("Child process %d STARTS READING.\n", processID);
 
-    int paraHacerAlgo = 0;
-    for (int i = 0; i < 10000; i++) {
-        paraHacerAlgo += i;
-        if (paraHacerAlgo > 100000000) paraHacerAlgo = 0;
+int readFile(pid_t processID, int lastPosition, char *fileName) {
+    printf("Child process %d STARTS READING.\n", processID);
+    FILE *file = fopen(fileName, "rb");
+    if (file == NULL) {
+        perror("Error al abrir el archivo");
+        return 1;
     }
 
-    printf("Child process %d ENDED READING.\n", processID);
+    int posicionUltimoSalto = -1;
 
-    return 5;
+    // Pone puntero de lectura donde el ultimo proceso dejo de leer
+    printf("LastPosition recibida: %d\n", lastPosition);
+    if (fseek(file, lastPosition == 0 ? 0 : lastPosition + 1, SEEK_SET) != 0) {
+        perror("Error al establecer la posición de lectura");
+        fclose(file);
+        return 1;
+    }
+    // Lee 8K a partir de la posicion que me puso fseek.
+    long bytesLeidos = fread(buffer, 1, READING_BUFFER, file);
+    if (bytesLeidos > 0)  // verifica si se han leído bytes desde el archivo
+        // Busca de atras para delante
+        for (long i = bytesLeidos - 1; i >= 0; i--) {
+            if (buffer[i] == '\n') {
+                posicionUltimoSalto = ftell(file) - (bytesLeidos - i);
+                printf("Ultimo salto de linea detectado: %d\n",
+                       posicionUltimoSalto);
+                break;
+            } else {
+                // Quita caracteres que esten despues del ultimo salto de linea.
+                buffer[i] = '\0';
+            }
+        }
+    fclose(file);
+    printf("Child process %d ENDED READING.\n", processID);
+    return posicionUltimoSalto;  //-1 si no encontro ultimo salto de linea
 }
 
 void searchPattern(int processID) {
@@ -116,7 +141,8 @@ int main(int argc, char *argv[]) {
                0);     // recibe tipo = su pid
         msg.type = 1;  // 1 para que solo reciba el padre
         msg.filePosition =
-            readFile(childID);  // Guarda la posicion del ultimo salto
+            readFile(childID, msg.filePosition,
+                     fileName);  // Guarda la posicion del ultimo salto
         msgsnd(msqid, (void *)&msg, sizeof(msg.matchesFound),
                0);  // Manda mensaje al padre para informar que termino de leer
         searchPattern(childID);  // Procesa los bytesLeidos leidos
