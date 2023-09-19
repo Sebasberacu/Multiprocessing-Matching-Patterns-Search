@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <regex.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,165 +11,142 @@
 #include <unistd.h>
 
 #define READING_BUFFER 8192
-#define PROCESS_POOL_SIZE 2
-int processes[PROCESS_POOL_SIZE];
-size_t bytesLeidos = NULL;
+#define PROCESS_POOL_SIZE 3
+
+long processes[PROCESS_POOL_SIZE];
 
 struct message {
-    int type;  // Message type
-    pid_t pid;
-    long filePosition;
-    char matchesFound[READING_BUFFER];  // Lines that matched regex pattern
+    long type;  // Message type
+    int filePosition;
+    char matchesFound[100];  // Lines that matched regex pattern
 } msg;
 
-/** Funcion responsable de la creación de los hijos.
- * El proceso principal guarda los PID de los hijos un arreglo global.
- * Params: No tiene.
- * Returns: No retorna.
- *
- */
-void createProcesses() {
+int createProcesses() {
     for (int i = 0; i < PROCESS_POOL_SIZE; i++) {
-        pid_t childProcess = fork();
-        if (childProcess != 0) {
-            processes[i] = childProcess;
-        } else {
-            break;
-        }
+        if (fork() != 0)
+            processes[i] = (long)i + 1;
+        else
+            return i + 1;
     }
+    return 0;
 }
 
-/** Funcion responsable de la lectura del archivo.
- *  Cada proceso debe colocar el puntero del archivo en la posicion donde
- * desea comenzar a leer, para esto se debe tomar en cuenta la ultima posicion
- * de lectura del proceso anterior. Despues se lee 8K a partir de ultima
- * posicion +1. Retorna la posicion del ultimo salto de linea leido en el
- * bloque.
- *
- */
-long readFile(int processID, long lastPosition, char *nombreArchivo) {
+int createMessageQueue() {
+    key_t msqkey = 999;
+    int msqid;
+
+    // Elimina la cola de mensajes si existe
+    if ((msqid = msgget(msqkey, 0666)) != -1) {
+        if (msgctl(msqid, IPC_RMID, NULL) == -1) {
+            perror("msgctl");
+            exit(1);
+        }
+        printf("Cola de mensajes eliminada.\n");
+    }
+
+    // Crea una nueva cola de mensajes
+    msqid = msgget(msqkey, IPC_CREAT | S_IRUSR | S_IWUSR);
+    return msqid;
+}
+
+int isQueueEmpty(int msqid) {
+    struct msqid_ds buf;
+    if (msgctl(msqid, IPC_STAT, &buf) == -1) {
+        perror("msgctl");
+        exit(1);
+    }
+    return (buf.msg_qnum == 0) ? 1 : 0;
+}
+
+int readFile(int processID) {
     printf("Child process %d STARTS READING.\n", processID);
-    FILE *archivo;
-    archivo = fopen(nombreArchivo, "rb");
-    if (archivo == NULL) {
-        perror("Error al abrir el archivo");
-        return 1;
-    }
-    char buffer[READING_BUFFER];
-    long posicionUltimoSalto =
-        -1;  //-1 indica que no ha encontrado salto de linea
 
-    // Pone puntero de lectura donde el ultimo proceso dejo de leer
-    if (fseek(archivo, lastPosition == 0 ? 0 : lastPosition + 1, SEEK_SET) !=
-        0) {
-        perror("Error al establecer la posición de lectura");
-        fclose(archivo);
-        return 1;
+    int paraHacerAlgo = 0;
+    for (int i = 0; i < 10000; i++) {
+        paraHacerAlgo += i;
+        if (paraHacerAlgo > 100000000) paraHacerAlgo = 0;
     }
-    // Lee 8K a partir de la posicion que me puso fseek.
-    bytesLeidos =
-        fread(buffer, 1, READING_BUFFER, archivo);  // Siempre carga 8192
-    if (bytesLeidos > 0) {                          // Leyo algo
-        // Busca el último salto de línea en el bloque actual de atras para
-        // delante atras
-        //! Corregir repeticion de lectura porque el buffer aun tiene guardado
-        //! los datos que
-        // en teoria no quiero, el puntero si retorna la ultima pos de salto
-        // pero el buffer no borra el resto.
-        for (size_t i = bytesLeidos - 1; i >= 0; i--) {
-            if (buffer[i] == '\n') {
-                posicionUltimoSalto = ftell(archivo) - (bytesLeidos - i);
-                break;
-            }
-        }
-    }
-    fclose(archivo);
+
     printf("Child process %d ENDED READING.\n", processID);
-    return posicionUltimoSalto;  //-1 si no encontro ultimo salto de linea
+
+    return 5;
 }
-/** Funcion responsable de buscar una expresion regular los bytesLeidos leidos
- * por el proceso. Si encuentra coincidencias debe enviar mensaje de
- * notificacion al padre. No retorna nada.
- * ! Usar fget para evitar repetir palabras por repetición de lectura en buffer
- * Otra solucion es usar el buffer aunque tenga guardado datos que no le corresponden
- * pero procesarlo hasta el ultimo salto de linea.
- *
- */
-void searchPattern(int msqid, const char *patron) {
-    printf("Child process %d STARTS searchPattern.\n", getpid());
-    // msg.type = 2;
-    sleep(3);
-    //  msgsnd(msqid, &msg, 1024, IPC_NOWAIT);
-    printf("Child process %d ENDED searchPattern.\n", getpid());
+
+void searchPattern(int processID) {
+    printf("Child process %d STARTS SEARCHING.\n", processID);
+
+    int paraHacerAlgo = 0;
+    for (int i = 0; i < 10000; i++) {
+        paraHacerAlgo += i;
+        if (paraHacerAlgo > 100000000) paraHacerAlgo = 0;
+    }
+
+    printf("Child process %d ENDED SEARCHING.\n", processID);
+}
+int getFileSize(char *fileName) {
+    FILE *file;
+    file = fopen(fileName, "r");
+    if (file == NULL) {
+        perror("Error opening file");
+        return (-1);
+    }
+    fseek(file, 0, SEEK_END);    // Pone puntero al final
+    int fileSize = ftell(file);  // Revisa el len del archivo
+    fseek(file, 0, SEEK_SET);    // Vuelve a poner el puntero al principio
+    fclose(file);
+    return fileSize;
 }
 
 int main(int argc, char *argv[]) {
-    int status;
-    key_t msqkey = 999;
-    int msqid = msgget(msqkey, IPC_CREAT | S_IRUSR | S_IWUSR);
+    char *fileName = "Texto.txt";
+    int msqid = createMessageQueue();
 
-    char *expresionRegular = "cuenta";
-    char *nombreArchivo = "Texto.txt";
-    FILE *file = fopen(nombreArchivo, "r");  // abrir el archivo
-    fseek(file, 0, SEEK_SET);                // lo posiciono al principio
-    long fileSize = ftell(file);
+    if (isQueueEmpty(msqid) == 1)
+        printf("La cola de mensajes esta vacia.\n");
+    else
+        printf("La cola de mensajes tiene mensajes.\n");
 
-    pid_t parentPid = getpid();
-    createProcesses();
-    pid_t childPid = getpid();
+    sleep(2);
+    int childID = createProcesses();  // cada hijo obtiene un ID unico >0. El
+                                      // padre obtiene 0.
     // Solo los hijos entran
-    while (childPid != parentPid) {
+    while (childID != 0) {
         // Espera mensaje del padre para empezar a leer
-        //! IPC_NOWAIT hace que el proceso no espere si la cola esta llena.
-        msgrcv(msqid, &msg, 1024, (int)childPid,
-               IPC_NOWAIT);  // recibe tipo = su pid
-
-        struct msqid_ds info;
-        if (msgctl(msqid, IPC_STAT, &info) == -1) {
-            perror("msgctl");
-            return 1;
-        }
-
-        printf("Número de mensajes en la cola: %ld\n", info.msg_qnum);
-
-        printf("HIJO %d recibe mensaje\n", getpid());
+        msgrcv(msqid, &msg, sizeof(msg.matchesFound), childID,
+               0);     // recibe tipo = su pid
+        msg.type = 1;  // 1 para que solo reciba el padre
         msg.filePosition =
-            readFile(childPid, msg.filePosition,
-                     nombreArchivo);  // Guarda la posicion del ultimo salto
-                                      // de linea leido
-        msg.type = 1;                 // 1 para que solo reciba el padre
-        msgsnd(msqid, &msg, 1024, IPC_NOWAIT);  // Manda mensaje al padre para
-                                                // informar que termino de leer
-        searchPattern(msqid,
-                      expresionRegular);  // Procesa los bytesLeidos leidos
+            readFile(childID);  // Guarda la posicion del ultimo salto
+        msgsnd(msqid, (void *)&msg, sizeof(msg.matchesFound),
+               0);  // Manda mensaje al padre para informar que termino de leer
+        searchPattern(childID);  // Procesa los bytesLeidos leidos
     }
 
+    sleep(2);
+
     // Solo el padre llega aquí.
+
+    int fileSize = getFileSize(fileName);
     int childCounter = 0;
-    struct message msg;
-    printf("Primer hijo: %d\n", processes[childCounter]);
-    msg.type = (int)processes[childCounter];
+
+    msg.type = (long)processes[childCounter];
     msg.filePosition = 0;
-    msg.pid = processes[childCounter];
-    msgsnd(msqid, &msg, 1024, IPC_NOWAIT);  // Manda a leer al primero
+    msgsnd(
+        msqid, (void *)&msg, sizeof(msg.matchesFound),
+        IPC_NOWAIT);  // Manda a leer al primero, no espera porque es el primero
 
     do {
-        msgrcv(msqid, &msg, 1024, 1, IPC_NOWAIT);  // Ya leyo porque type=1
-        msg.type = (int)processes[childCounter + 1];
-        msg.pid = processes[childCounter + 1];
-        msgsnd(msqid, &msg, 1024, IPC_NOWAIT);
-        if (childCounter + 1 ==
-            PROCESS_POOL_SIZE) {  // Reutilizar procesos hijos, si ya se
-                                  // utilizaron todos
-            childCounter = 0;
-        }
-        // msgrcv(msqid, &msg, 1024, 2,
-        // IPC_NOWAIT);  // Espera a que algun hijo termine de procesar
-
-    } while ((long)msg.filePosition <=
+        msgrcv(msqid, &msg, sizeof(msg.matchesFound), 1,
+               0);  // Ya leyo porque type=1
+        // reinicia lectura de hijos si llega al ultimo
+        childCounter =
+            (childCounter + 1 >= PROCESS_POOL_SIZE) ? 0 : childCounter + 1;
+        msg.type = processes[childCounter];  // Pasar el turno al siguiente hijo
+        msgsnd(msqid, (void *)&msg, sizeof(msg.matchesFound), 0);
+        // Esperar a que algun hijo termine de procesar para imprimir
+    } while (msg.filePosition <=
              fileSize);  // mientras no se haya terminado de leer
 
-    fclose(file);                   // Cerrar archivo
     msgctl(msqid, IPC_RMID, NULL);  // Eliminar la cola de mensajes
 
     return 0;
