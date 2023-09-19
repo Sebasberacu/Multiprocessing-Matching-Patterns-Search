@@ -6,7 +6,6 @@
 
 #define READING_BUFFER 8192  //8K
 char buffer[READING_BUFFER];
-int lineCounter = 1;  // Contador de líneas
 
 /** Funcion que procesa el texto leido en el buffer.
  *  Parametros:
@@ -29,14 +28,13 @@ void processBuffer(const char *regexStr) {
             strncpy(line, ptr, lineLength);
             line[lineLength] = '\0';
             if (regexec(&regex, line, 0, NULL, 0) == 0)
-                printf("Coincidencia en la línea %d: %s\n", lineCounter, line);
+                printf("Coincidencia en la línea: %s\n", line);
             ptr = newline + 1;
-            lineCounter++;
         } else {
             char line[READING_BUFFER];
             strcpy(line, ptr);
             if (regexec(&regex, line, 0, NULL, 0) == 0)
-                printf("Coincidencia en la línea %d: %s\n", lineCounter, line);
+                printf("Coincidencia en la línea: %s\n", line);
 
             break;
         }

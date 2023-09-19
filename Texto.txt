@@ -51,7 +51,7 @@ Donde se prosiguen los innumerables trabajos que el
 bravo don Quijote y su buen escudero Sancho Panza pasaron en la venta
 que, por su mal, pensó que era castillo
 
-Donde se cuentan las razones que pasó Sancho Panza
+Donde se cuentan las razones que pasó Sancho Panza 1
 con su señor Don Quijote, con otras aventuras dignas de ser
 contadas
 
@@ -282,7 +282,7 @@ del desencanto de Dulcinea, con otros admirables sucesos
 Donde se cuenta la estraña y jamás imaginada
 aventura de la dueña Dolorida, alias de la condesa Trifaldi, con una
 carta que Sancho Panza escribió a su mujer Teresa Panza
-Que trata de la condición y ejercicio del famoso
+Que trata de la condición y ejercicio del famoso 2
 hidalgo don Quijote de la Mancha
 
 Que trata de la primera salida que de su tierra hizo
@@ -506,7 +506,7 @@ llegó y pudo llegar el inaudito ánimo de don Quijote, con la
 felicemente acabada aventura de los leones
 
 De lo que sucedió a don Quijote en el castillo o
-casa del Caballero del Verde Gabán, con otras cosas extravagantes
+casa del Caballero del Verde Gabán, con otras cosas extravagantes 2
 
 Donde se cuenta la aventura del pastor enamorado, con
 otros en verdad graciosos sucesos
@@ -533,36 +533,4 @@ Donde se apunta la aventura del rebuzno y la graciosa
 del titerero, con las memorables adivinanzas del mono adivino
 
 Donde se prosigue la graciosa aventura del titerero,
-con otras cosas en verdad harto buenas
-
-Donde se da cuenta quiénes eran maese Pedro y su
-mono, con el mal suceso que don Quijote tuvo en la aventura del
-rebuzno, que no la acabó como él quisiera y como lo tenía pensado
-
-De cosas que dice Benengeli que las sabrá quien le
-leyere, si las lee con atención
-
-De la famosa aventura del barco encantado
-
-De lo que le avino a don Quijote con una bella
-cazadora
-
-Que trata de muchas y grandes cosas
-
-De la respuesta que dio don Quijote a su
-reprehensor, con otros graves y graciosos sucesos
-
-De la sabrosa plática que la duquesa y sus
-doncellas pasaron con Sancho Panza, digna de que se lea y de que se
-note
-
-Que cuenta de la noticia que se tuvo de cómo se
-había de desencantar la sin par Dulcinea del Toboso, que es una de las
-aventuras más famosas deste libro
-
-Donde se prosigue la noticia que tuvo don Quijote
-del desencanto de Dulcinea, con otros admirables sucesos
-
-Donde se cuenta la estraña y jamás imaginada
-aventura de la dueña Dolorida, alias de la condesa Trifaldi, con una
-carta que Sancho Panza escribió a su mujer Teresa Panza
+con otras cosas en verdad harto buenas 2
