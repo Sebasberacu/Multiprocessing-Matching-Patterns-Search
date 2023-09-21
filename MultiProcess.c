@@ -21,8 +21,8 @@ long states[PROCESS_POOL_SIZE][3];//Cubo con dimenciones -> 0: Pos hijo en array
 struct message {
     long type;  // Message type
     long filePosition;
-    char matchesFound[8000];  // Lines that matched regex pattern
     long arrayPosition;
+    char matchesFound[8000];  // Lines that matched regex pattern
 } msg;
 /** Funcion encargada de crear el pool de procesos.
  *  Parametros: no tiene
@@ -115,7 +115,7 @@ int readFile(pid_t processID, long lastPosition, char *fileName) {
     long posicionUltimoSalto = -1;
 
     // Pone puntero de lectura donde el ultimo proceso dejo de leer
-    printf("LastPosition recibida: %ld\n", lastPosition);
+    printf("LastPosition recibida: %ld en hijo %d\n", lastPosition,processID);
     if (fseek(file, lastPosition == 0 ? 0 : lastPosition + 1, SEEK_SET) != 0) {
         perror("Error al establecer la posición de lectura");
         fclose(file);
@@ -147,7 +147,7 @@ int readFile(pid_t processID, long lastPosition, char *fileName) {
 void searchPattern(int msqid ,pid_t processID, const char *regexStr,long arrayPosition) {
     printf("Child process %d STARTS PROCESSING.\n", processID);
     strcpy(msg.matchesFound, "");
-    char *ptr = buffer;
+    char * ptr = buffer;
     regex_t regex;
     if (regcomp(&regex, regexStr, REG_EXTENDED) != 0) {
         fprintf(stderr, "Error al compilar la expresión regular.\n");
@@ -166,7 +166,6 @@ void searchPattern(int msqid ,pid_t processID, const char *regexStr,long arrayPo
                 strcat(line, "|");  // Delimitador
                 strcat(coincidencias, line);
             }
-
             ptr = newline + 1;
         } else {
             char line[READING_BUFFER];
@@ -180,7 +179,6 @@ void searchPattern(int msqid ,pid_t processID, const char *regexStr,long arrayPo
     regfree(&regex);
     memset(buffer, 0, READING_BUFFER);
     // Enviar coincidencias al padre.
-    printf("Hijo procesando recibe array position %ld\n",arrayPosition);//No esta llegando bien
     msg.type=2;//mandar a imprimir
     msg.arrayPosition=arrayPosition;
     coincidencias[sizeof(coincidencias) - 1] = '\0';
@@ -218,7 +216,7 @@ long getFileSize(char *fileName) {
 
 int main(int argc, char *argv[]) {
     char *fileName = "DonQuijote.txt";
-    char *regex = "unsolicited";
+    char *regex = "hidalgo";
     int msqid = createMessageQueue();
 
     if (isQueueEmpty(msqid) == 1)
@@ -237,7 +235,6 @@ int main(int argc, char *argv[]) {
         arrayPositionHijo=msg.arrayPosition;
         msg.type = 1;  // 1 para que solo reciba el padre
         msg.filePosition = readFile(childID, msg.filePosition,fileName);  // Guarda la posicion del ultimo salto
-        printf("Hijo leyendo recibe array position: %ld\n",arrayPositionHijo);//No esta recibiendo bien
         msg.arrayPosition=arrayPositionHijo;
         msgsnd(msqid, (void *)&msg, sizeof(msg.matchesFound),0);  // Manda mensaje al padre para informar que termino de leer
         searchPattern(msqid,childID, regex,arrayPositionHijo);  // Procesa los datos leidos
@@ -256,6 +253,7 @@ int main(int argc, char *argv[]) {
     const char delimitador[] = "|";
     char *token ;
     long posHijoComunicado=0;
+    int cantidadCoincidencias=1;
 
 
     do {
@@ -270,7 +268,6 @@ int main(int argc, char *argv[]) {
         childCounter =(childCounter + 1 >= PROCESS_POOL_SIZE) ? 0 : childCounter + 1;
         msg.type = processes[childCounter];  // Pasar el turno al siguiente hijo
         msg.arrayPosition =  childCounter;
-        printf("Se supone que el padre manda array position: %ld\n",msg.arrayPosition);//Si manda bien el array position
         msgsnd(msqid, (void *)&msg, sizeof(msg.matchesFound), 0);
         states[childCounter][1]=1;//Pone el estado del hijo (que acaba de poner a leer) en 1: Leyendo
         //Imprimir coincidencias de los hijos que ya procesaron
@@ -281,11 +278,11 @@ int main(int argc, char *argv[]) {
             //Se debe enviar mensaje al mae para que imprima
             token = strtok(msg.matchesFound, delimitador);
             while (token != NULL) {
-                printf("Coincidencia: %s\n", token);
+                printf("Coincidencia #%d: %s\n", cantidadCoincidencias,token);
                 token = strtok(NULL, delimitador);
+                cantidadCoincidencias++;
             }
         }
-        
     } while (1);  // mientras no se haya terminado de leer
     printf("\n SE TERMINA DE LEER\n");
     while(1){
@@ -296,14 +293,15 @@ int main(int argc, char *argv[]) {
         //Se debe enviar mensaje al mae para que imprima
         token = strtok(msg.matchesFound, delimitador);
         while (token != NULL) {
-            printf("Coincidencia: %s\n", token);
+            printf("Coincidencia #%d: %s\n", cantidadCoincidencias,token);
             token = strtok(NULL, delimitador);
+            cantidadCoincidencias++;
         }
         if (hijosDisponibles()!=0)
             break;
     }
     //Ciclo para eliminar a los hijos.
-    //printf("\n PADRE TERMINA DO WHILE \n");
+    printf("\n PADRE TERMINA DO WHILE \n");
     for (int i = 0; i < PROCESS_POOL_SIZE; i++) {
         kill(states[i][2], SIGTERM);
     }
