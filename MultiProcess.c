@@ -97,7 +97,7 @@ int isQueueEmpty(int msqid) {
  *
  */
 int readFile(pid_t processID, long lastPosition, char *fileName) {
-    printf("Child process %d STARTS READING.\n", processID);
+    //printf("Child process %d STARTS READING.\n", processID);
 
     if (lastPosition == -1) {  // Ya no hay nada mas que leer.
         printf("Child process %d DOES NOT HAVE ANYTHING TO  READ.\n",processID);
@@ -115,7 +115,7 @@ int readFile(pid_t processID, long lastPosition, char *fileName) {
     long posicionUltimoSalto = -1;
 
     // Pone puntero de lectura donde el ultimo proceso dejo de leer
-    printf("LastPosition recibida: %ld en hijo %d\n", lastPosition,processID);
+    //printf("LastPosition recibida: %ld en hijo %d\n", lastPosition,processID);
     if (fseek(file, lastPosition == 0 ? 0 : lastPosition + 1, SEEK_SET) != 0) {
         perror("Error al establecer la posición de lectura");
         fclose(file);
@@ -136,7 +136,8 @@ int readFile(pid_t processID, long lastPosition, char *fileName) {
             }
         }
     fclose(file);
-    printf("Child process %d ENDED READING.\n", processID);
+    //printf("Ultimo salto de linea %ld en hijo %d\n",posicionUltimoSalto,processID);
+    //printf("Child process %d ENDED READING.\n", processID);
     return posicionUltimoSalto;  //-1 si no encontro ultimo salto de linea
 }
 /** Funcion que procesa el texto leido en el buffer.
@@ -145,7 +146,7 @@ int readFile(pid_t processID, long lastPosition, char *fileName) {
  *  Retorna: no retorna.
  */
 void searchPattern(int msqid ,pid_t processID, const char *regexStr,long arrayPosition) {
-    printf("Child process %d STARTS PROCESSING.\n", processID);
+    //printf("Child process %d STARTS PROCESSING.\n", processID);
     strcpy(msg.matchesFound, "");
     char * ptr = buffer;
     regex_t regex;
@@ -179,16 +180,19 @@ void searchPattern(int msqid ,pid_t processID, const char *regexStr,long arrayPo
     regfree(&regex);
     memset(buffer, 0, READING_BUFFER);
     // Enviar coincidencias al padre.
-    msg.type=2;//mandar a imprimir
+    msg.type=100;//mandar a imprimir
     msg.arrayPosition=arrayPosition;
     coincidencias[sizeof(coincidencias) - 1] = '\0';
     // Copia el contenido de coincidencias en msg.matchesFound
     strcpy(msg.matchesFound, coincidencias);
     msgsnd(msqid, (void *)&msg, sizeof(msg.matchesFound),0);
     strcpy(buffer, "");//Limpia buffer
-    printf("Child process %d ENDED PROCESSING.\n", processID);
+    //printf("Child process %d ENDED PROCESSING.\n", processID);
 }
-int hijosDisponibles(){
+/** Funcion para verificar si todos los hijos estan disponibles.
+ * 
+*/
+int childrenAvailable(){
     int suma=0;
     for (int i=0;i<PROCESS_POOL_SIZE;i++)
         suma+=states[i][1];
@@ -216,7 +220,7 @@ long getFileSize(char *fileName) {
 
 int main(int argc, char *argv[]) {
     char *fileName = "DonQuijote.txt";
-    char *regex = "hidalgo";
+    char *regex = "Sancho";
     int msqid = createMessageQueue();
 
     if (isQueueEmpty(msqid) == 1)
@@ -232,8 +236,9 @@ int main(int argc, char *argv[]) {
     while (childID != 0) {
         // Espera mensaje del padre para empezar a leer
         msgrcv(msqid, &msg, sizeof(msg.matchesFound), childID,0);  // recibe tipo = su pid
+
         arrayPositionHijo=msg.arrayPosition;
-        msg.type = 1;  // 1 para que solo reciba el padre
+        msg.type = childID; 
         msg.filePosition = readFile(childID, msg.filePosition,fileName);  // Guarda la posicion del ultimo salto
         msg.arrayPosition=arrayPositionHijo;
         msgsnd(msqid, (void *)&msg, sizeof(msg.matchesFound),0);  // Manda mensaje al padre para informar que termino de leer
@@ -246,6 +251,7 @@ int main(int argc, char *argv[]) {
     int childCounter = 0;
 
     msg.type = (long)processes[childCounter];
+    int activeChild=(long)processes[childCounter];
     msg.arrayPosition = states[0][0];//Para saber cual hijo me envia el mensaje (array position del states[i][0])
     msg.filePosition = 0;
     msgsnd(msqid, (void *)&msg, sizeof(msg.matchesFound),IPC_NOWAIT);  // Manda a leer al primero, no espera porque es el primero
@@ -256,25 +262,38 @@ int main(int argc, char *argv[]) {
     int cantidadCoincidencias=1;
 
 
-    do {
-        msgrcv(msqid, &msg, sizeof(msg.matchesFound), 1,0);  // Algun hijo termina de leer.
+    while(1){
+        msgrcv(msqid, &msg, sizeof(msg.matchesFound), activeChild,0);  // Algun hijo termina de leer.
         posHijoComunicado = msg.arrayPosition;//Guarda el hijo que acaba de leer
         if (msg.filePosition == -1)  // No hay nada mas que leer (fin de archivo).
             break;
-        //printf("Padre recibe array position %ld. Al recibir mensaje de terminacion de lectura\n",posHijoComunicado);//Si recibe bien
+        
         //Cambia estado del hijo que me aviso que termino de leer.    
         states[posHijoComunicado][1]=2;//Pone el estado del hijo en 2: Procesando
         // reinicia lectura de hijos si llega al ultimo
         childCounter =(childCounter + 1 >= PROCESS_POOL_SIZE) ? 0 : childCounter + 1;
+        activeChild = processes[childCounter];
         msg.type = processes[childCounter];  // Pasar el turno al siguiente hijo
         msg.arrayPosition =  childCounter;
         msgsnd(msqid, (void *)&msg, sizeof(msg.matchesFound), 0);
         states[childCounter][1]=1;//Pone el estado del hijo (que acaba de poner a leer) en 1: Leyendo
         //Imprimir coincidencias de los hijos que ya procesaron
-        if (msgrcv(msqid, &msg, sizeof(msg.matchesFound), 2,IPC_NOWAIT)!=-1){  //Imprimir type=2;
-            posHijoComunicado=msg.arrayPosition;
-            //printf("Padre recibe array position %ld . Al recibir mensaje para imprimir.\n",posHijoComunicado);//Si recibe bien
-            states[posHijoComunicado][1]=0;//Hijo en estado Disponible
+        msgrcv(msqid, &msg, sizeof(msg.matchesFound), 100,0);  //Imprimir type=2;
+        posHijoComunicado=msg.arrayPosition;
+        states[posHijoComunicado][1]=0;//Hijo en estado Disponible
+        //Se debe enviar mensaje al mae para que imprima
+        token = strtok(msg.matchesFound, delimitador);
+        while (token != NULL) {
+            printf("Coincidencia #%d: %s\n", cantidadCoincidencias,token);
+            token = strtok(NULL, delimitador);
+            cantidadCoincidencias++;
+        }
+        
+    }
+    while(1){
+        sleep(1);
+        if (msgrcv(msqid, &msg, sizeof(msg.matchesFound), 100,IPC_NOWAIT)!=-1){  //Imprimir type=2;
+            states[msg.arrayPosition][1]=0;//Hijo en estado Disponible
             //Se debe enviar mensaje al mae para que imprima
             token = strtok(msg.matchesFound, delimitador);
             while (token != NULL) {
@@ -283,25 +302,10 @@ int main(int argc, char *argv[]) {
                 cantidadCoincidencias++;
             }
         }
-    } while (1);  // mientras no se haya terminado de leer
-    printf("\n SE TERMINA DE LEER\n");
-    while(1){
-        printf("\n Padre espera a que los hijos terminen de procesar \n");
-        sleep(1);
-        msgrcv(msqid, &msg, sizeof(msg.matchesFound), 2,IPC_NOWAIT);  //Imprimir type=2;
-        states[msg.arrayPosition][1]=0;//Hijo en estado Disponible
-        //Se debe enviar mensaje al mae para que imprima
-        token = strtok(msg.matchesFound, delimitador);
-        while (token != NULL) {
-            printf("Coincidencia #%d: %s\n", cantidadCoincidencias,token);
-            token = strtok(NULL, delimitador);
-            cantidadCoincidencias++;
-        }
-        if (hijosDisponibles()!=0)
+        if (childrenAvailable()==0)//Todos disponibles y ya se leyo todo, significa que terminaron.
             break;
     }
     //Ciclo para eliminar a los hijos.
-    printf("\n PADRE TERMINA DO WHILE \n");
     for (int i = 0; i < PROCESS_POOL_SIZE; i++) {
         kill(states[i][2], SIGTERM);
     }
