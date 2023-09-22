@@ -13,7 +13,7 @@
 #define READING_BUFFER 8192
 #define PROCESS_POOL_SIZE 3
 char buffer[READING_BUFFER];//Lectura del archivo
-long processes[PROCESS_POOL_SIZE];//
+long processes[PROCESS_POOL_SIZE];//Guarda identificador de proceso
 long states[PROCESS_POOL_SIZE][3];//0: Pos hijo en array
                                  // 1: Estado hijo
                                  // 2: Pid hijo
@@ -251,7 +251,7 @@ int main(int argc, char *argv[]) {
         msgsnd(msqid, (void *)&msg, sizeof(msg.matchesFound), 0);
         states[childCounter][1]=1;//Pone el estado del hijo (que acaba de poner a leer) en 1: Leyendo
         //Imprimir coincidencias de los hijos que ya procesaron
-        msgrcv(msqid, &msg, sizeof(msg.matchesFound), 100,0);  //Imprimir type=2;
+        msgrcv(msqid, &msg, sizeof(msg.matchesFound), 100,0); 
         posHijoComunicado=msg.arrayPosition;
         states[posHijoComunicado][1]=0;//Hijo en estado Disponible
         //Se debe enviar mensaje al mae para que imprima
