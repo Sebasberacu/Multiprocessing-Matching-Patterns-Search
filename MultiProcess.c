@@ -1,3 +1,11 @@
+/**
+ * Gerp Proyect. Principios de Sistemas Operativos
+ * 
+ * @file MultiProcess.c
+ * @author Sebastián Bermúdez Acuña & Felipe Obando Arrieta
+ * @date 2023-09-24
+ */
+
 #include <errno.h>
 #include <regex.h>
 #include <stdio.h>
@@ -6,28 +14,31 @@
 #include <sys/ipc.h>
 #include <sys/msg.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/types.h>
+#include <signal.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 #define READING_BUFFER 8192
 #define PROCESS_POOL_SIZE 3
-char buffer[READING_BUFFER];//Lectura del archivo
-long processes[PROCESS_POOL_SIZE];//Guarda identificador de proceso
-long states[PROCESS_POOL_SIZE][3];//0: Pos hijo en array
-                                 // 1: Estado hijo
-                                 // 2: Pid hijo
+char buffer[READING_BUFFER]; // For file reading
+long processes[PROCESS_POOL_SIZE]; // Save identifier for each process
+long states[PROCESS_POOL_SIZE][3]; // For child processes. pos 0: Child position in array. pos 1: Child state. pos 2: Pid.
+
+// Communication between processes
 struct message {
     long type;  // Message type
     long filePosition;
     long arrayPosition;
     char matchesFound[8000];  // Lines that matched regex pattern
 } msg;
-/** Funcion encargada de crear el pool de procesos.
- *  Parametros: no tiene
- *  Retorna:
- *          0: Si es el padre.
- *          _: Si es un hijo.
+
+/** In charge of creating processes.
+ *  Parameters: None
+ *  Returns:
+ *          0: If the father.
+ *          _: Unique child id
  */
 int createProcesses() {
     pid_t pid;
@@ -44,33 +55,35 @@ int createProcesses() {
     }
     return 0;
 }
-/** Funcion encargada de crear la cola de mensajes.
- *  Parametros: no tiene
- *  Retorna:
- *          int (id de la cola)
+
+/** In charge of creating message queue.
+ *  Parameters: None
+ *  Returns:
+ *          int: queue identifier
  */
 int createMessageQueue() {
     key_t msqkey = 999;
     int msqid;
 
-    // Elimina la cola de mensajes si existe
+    // Delete queue if existent
     if ((msqid = msgget(msqkey, 0666)) != -1) {
         if (msgctl(msqid, IPC_RMID, NULL) == -1) {
             perror("msgctl");
             exit(1);
         }
-        printf("Cola de mensajes eliminada.\n");
+        printf("Former existent queue eliminated.\n");
     }
-    // Crea una nueva cola de mensajes
+    // Creates new message queue
     msqid = msgget(msqkey, IPC_CREAT | S_IRUSR | S_IWUSR);
     return msqid;
 }
-/** Funcion para verificar si la cola está vacía.
+
+/** Checks if queue is empty. Development purposes.
  *  Parametros:
- *             int msqid: id de la cola de mensajes.
+ *             int msqid: message queue id
  *  Retorna:
- *             0: Si está vacía.
- *             1: Si no está vacía.
+ *             0: If empty.
+ *             1: Not empty.
  */
 int isQueueEmpty(int msqid) {
     struct msqid_ds buf;
@@ -81,69 +94,69 @@ int isQueueEmpty(int msqid) {
     return (buf.msg_qnum == 0) ? 1 : 0;
 }
 
-/** Funcion encargada de leer el archivo.
- *  Lee en bloques de 8K.
- * Parametros:
- *            pid_t processID: Id del proceso que va a leer.
- *            int lastPosition: Ultima posicion que se leyó en el archivo.
- *            char * fileName: Nombre del archivo a leer.
- *  Retorna:
- *           int (ultima posicion leida)
- *
+/** Function that reads the specified file.
+ *  Reads in 8K blocks.
+ *  Parameters:
+ *            pid_t processID: id of the proccess that will read.
+ *            int lastPosition: last position read from file.
+ *            char * fileName: file name.
+ *  Returns:
+ *           int: last jump position
  */
 int readFile(pid_t processID, long lastPosition, char *fileName) {
-    if (lastPosition == -1) {  // Ya no hay nada mas que leer.
-        printf("Child process %d DOES NOT HAVE ANYTHING TO  READ.\n",processID);
-        sleep(1);//Para que no reviente la consola a puro print
+    if (lastPosition == -1) {  // Nothing more to read.
+        sleep(1);
         exit(1);
     }
 
-    FILE *file = fopen(fileName, "rb");
+    FILE *file = fopen(fileName, "rb"); // Open file
     if (file == NULL) {
-        perror("Error al abrir el archivo");
+        perror("Error while opening file.");
         return 1;
     }
 
-    long posicionUltimoSalto = -1;//Retorna -1 si llegó al final del archivo
+    long lastJumpPosition = -1; //Default -1 if end of file is reached
 
-    // Pone puntero de lectura donde el ultimo proceso dejo de leer
-    //printf("LastPosition recibida: %ld en hijo %d\n", lastPosition,processID);
+    // Places reading pointer where the last process ended reading
     if (fseek(file, lastPosition == 0 ? 0 : lastPosition + 1, SEEK_SET) != 0) {
-        perror("Error al establecer la posición de lectura");
+        perror("Error while establishing reading position.");
         fclose(file);
         return 1;
     }
-    // Lee 8K a partir de la posicion que me puso fseek.
-    long bytesLeidos = fread(buffer, 1, READING_BUFFER, file);
-    if (bytesLeidos > 0)  // verifica si se han leído bytes desde el archivo
-        // Busca de atras para delante
-        for (long i = bytesLeidos - 1; i >= 0; i--) {
+    // Reads 8K from the position given by fseek
+    long bytesRead = fread(buffer, 1, READING_BUFFER, file);
+    if (bytesRead > 0)
+        // From back to front
+        for (long i = bytesRead - 1; i >= 0; i--) {
             if (buffer[i] == '\n') {
-                posicionUltimoSalto = ftell(file) - (bytesLeidos - i);
-                //printf("Ultimo salto de linea detectado: %d\n",posicionUltimoSalto);
+                lastJumpPosition = ftell(file) - (bytesRead - i);
                 break;
             } else {
-                // Quita caracteres que esten despues del ultimo salto de linea.
+                // Removes characters after the last jump ('\n')
                 buffer[i] = '\0';
             }
         }
     fclose(file);
-    return posicionUltimoSalto;  //-1 si no encontro ultimo salto de linea
+    return lastJumpPosition;
 }
-/** Funcion que procesa el texto leido en el buffer.
- *  Parametros:
- *    - regexStr: La expresión regular a buscar en las líneas.
- *  Retorna: no retorna.
+
+/** Processes the text read in the buffer and checks for regex coincidences.
+ *  Parameters:
+ *            int msqid: message queue id
+ *            pid_t processID: id of the process searching
+ *            char* regexStr: Looked regular expression.
+ *            long arrayPosition: current position in array of processes
  */
 void searchPattern(int msqid ,pid_t processID, const char *regexStr,long arrayPosition) {
     strcpy(msg.matchesFound, "");
     char * ptr = buffer;
     regex_t regex;
     if (regcomp(&regex, regexStr, REG_EXTENDED) != 0) {
-        fprintf(stderr, "Error al compilar la expresión regular.\n");
+        fprintf(stderr, "Error processing regular expression.\n");
         exit(1);
     }
-    char coincidencias[8000] = "";  // Guardar coincidencias encontradas en el buffer
+
+    char coincidences[8000] = "";  // To save coincidences found at buffer
     while (ptr < buffer + READING_BUFFER) {
         char *newline = strchr(ptr, '\n');
         if (newline != NULL) {
@@ -152,9 +165,9 @@ void searchPattern(int msqid ,pid_t processID, const char *regexStr,long arrayPo
             strncpy(line, ptr, lineLength);
             line[lineLength] = '\0';
             if (regexec(&regex, line, 0, NULL, 0) == 0) {
-                //  Guardar en array para enviarselo al padre despues de procesar todo el buffer
-                strcat(line, "|");  // Delimitador
-                strcat(coincidencias, line);
+                // Save in array to send it to father later
+                strcat(line, "|");  // Delimiter
+                strcat(coincidences, line);
             }
             ptr = newline + 1;
         } else {
@@ -162,126 +175,150 @@ void searchPattern(int msqid ,pid_t processID, const char *regexStr,long arrayPo
             strcpy(line, ptr);
             if (regexec(&regex, line, 0, NULL, 0) == 0)
                 strcat(line,"|");
-                strcat(coincidencias,line);
+                strcat(coincidences,line);
             break;
         }
     }
     regfree(&regex);
-    memset(buffer, 0, READING_BUFFER);
-    // Enviar coincidencias al padre.
-    msg.type=100;//mandar a imprimir
+    memset(buffer, 0, READING_BUFFER); // Free memory
+    
+    // Send coincidences to father
+    msg.type=100;
     msg.arrayPosition=arrayPosition;
-    coincidencias[sizeof(coincidencias) - 1] = '\0';
-    // Copia el contenido de coincidencias en msg.matchesFound
-    strcpy(msg.matchesFound, coincidencias);
+    coincidences[sizeof(coincidences) - 1] = '\0';
+    // Copies content in coincidences at msg.matchesFound
+    strcpy(msg.matchesFound, coincidences);
     msgsnd(msqid, (void *)&msg, sizeof(msg.matchesFound),0);
-    strcpy(buffer, "");//Limpia buffer
+    strcpy(buffer, ""); // Clean buffer
 }
-/** Funcion para verificar si todos los hijos estan disponibles.
- *  Parametros: no tiene.
- *  Retorna: 0 si todos los hijos estan disponibles.
- *           _ algun hijo tiene otro estado.
+
+/** Check if all childs are available
+ *  Parameters: None
+ *  Returns: 
+ *            0: all children available.
+ *            _: not all children are available.
 */
 int childrenAvailable(){
-    int suma=0;
+    int sum=0;
     for (int i=0;i<PROCESS_POOL_SIZE;i++)
-        suma+=states[i][1];
-    return suma;
+        sum+=states[i][1];
+    return sum;
 }
-//Recibe el nombre del archivo y la expresion regular en los argumentos del programa.
+
+// Receives the file name and the regular expression in the program arguments
 int main(int argc, char *argv[]) {
     if (argc != 3) {
-        printf("Uso: %s <argumento1> <argumento2>\n", argv[0]);
-        return 1; // Termina el programa con un código de error
+        printf("Correct use: %s <argumento1> <argumento2>\n", argv[0]);
+        return 1;
     }
-    printf("Nombre de archivo ingresado: %s\n", argv[1]);
-    printf("Expresion regular ingresada: %s\n", argv[2]);
+    printf("File received: %s\n", argv[1]);
+    printf("Regular expression received: %s\n", argv[2]);
 
-    char * fileName = argv[1];//Saca el nombre del archivo que recibe en el argumento
-    char * regex = argv[2];//Saca la expresion regular que recibe en el argumento
+    char * fileName = argv[1]; // Gets the file name entered
+    char * regex = argv[2]; // Gets the regular expression entered
 
-    int msqid = createMessageQueue();
+    // To measure execution time
+    struct timeval start, end;
+    long seconds, microseconds;
+    gettimeofday(&start, NULL);
 
-    if (isQueueEmpty(msqid) == 1)
-        printf("La cola de mensajes esta vacia.\n");
-    else
-        printf("La cola de mensajes tiene mensajes.\n");
+    int msqid = createMessageQueue(); // Creates message queue
+    sleep(1);
 
-    sleep(2);
-    int childID = createProcesses();  // cada hijo obtiene un ID unico >0. El padre obtiene 0.
-    // Solo los hijos entran
-    long arrayPositionHijo;
+    // Create all child processes
+    int childID = createProcesses();  // every child obtains an unique ID >0. Father obtains 0.
+    
+    // Only children loop here
+    long childArrayPosition;
     while (childID != 0) {
-        // Espera mensaje del padre para empezar a leer
-        msgrcv(msqid, &msg, sizeof(msg.matchesFound), childID,0);  // recibe tipo = su pid
-        arrayPositionHijo=msg.arrayPosition; 
+        // Waits for the father message to start reading
+        msgrcv(msqid, &msg, sizeof(msg.matchesFound), childID,0);  // receives, message type = their id
+        
+        childArrayPosition=msg.arrayPosition; 
         msg.type = childID; 
-        msg.filePosition = readFile(childID, msg.filePosition,fileName);  // Guarda la posicion del ultimo salto
-        msg.arrayPosition=arrayPositionHijo;
-        msgsnd(msqid, (void *)&msg, sizeof(msg.matchesFound),0);  // Manda mensaje al padre para informar que termino de leer
-        searchPattern(msqid,childID, regex,arrayPositionHijo);  // Procesa los datos leidos
+        // Starts reading
+        msg.filePosition = readFile(childID, msg.filePosition,fileName);  // Saves last jump position
+        msg.arrayPosition=childArrayPosition;
+        
+        msgsnd(msqid, (void *)&msg, sizeof(msg.matchesFound),0);  // Sends message to father. Finished reading
+        searchPattern(msqid, childID, regex, childArrayPosition);  // Process data. Looks for regex match.
     }
     sleep(2);
-    // Solo el padre llega aquí.
+    
+    // Only father enters here.
     int childCounter = 0;
+    int activeChild = (long)processes[childCounter];
 
     msg.type = (long)processes[childCounter];
-    int activeChild=(long)processes[childCounter];
-    msg.arrayPosition = states[0][0];//Para saber cual hijo me envia el mensaje (array position del states[i][0])
+    msg.arrayPosition = states[0][0]; // To know which children sends the message (array position of states[i][0])
     msg.filePosition = 0;
-    msgsnd(msqid, (void *)&msg, sizeof(msg.matchesFound),IPC_NOWAIT);  // Manda a leer al primero, no espera porque es el primero
-    states[0][1]=1;//Pone el estado del primer hijo en 1: Leyendo
-    const char delimitador[] = "|";//Para separar las coincidencias que el hijo envia
-    char * token ;//Para imprimir las coincidencias de la expresion regular
-    long posHijoComunicado = 0;//Posicion en el arreglo "states"
-    int cantidadCoincidencias = 1;
+    msgsnd(msqid, (void *)&msg, sizeof(msg.matchesFound),IPC_NOWAIT);  // Tells first child to start reading.
+    states[0][1]=1; // Sets first child state in 1: Reading.
+    const char delimiter[] = "|"; // To separate coincidences sent by child
+    char * token ; // To print the coincidences of the regular expression.
+    long communicatedChildPosition = 0; // Position in "states" array
+    int coincidencesFound = 1;
 
     while(1){
-        msgrcv(msqid, &msg, sizeof(msg.matchesFound), activeChild,0);  // Algun hijo termina de leer.
-        posHijoComunicado = msg.arrayPosition;//Guarda el hijo que acaba de leer
-        if (msg.filePosition == -1)  // No hay nada mas que leer (fin de archivo).
+        msgrcv(msqid, &msg, sizeof(msg.matchesFound), activeChild,0);  // Waits for a child to end reading
+        communicatedChildPosition = msg.arrayPosition; // Saves the child that just read
+        
+        if (msg.filePosition == -1)  // Nothing else to read. End of file.
             break;
-        //Cambia estado del hijo que me aviso que termino de leer.    
-        states[posHijoComunicado][1]=2;//Pone el estado del hijo en 2: Procesando
-        // reinicia lectura de hijos si llega al ultimo
-        childCounter =(childCounter + 1 >= PROCESS_POOL_SIZE) ? 0 : childCounter + 1;
+
+        // Change the state of the child that just read 
+        states[communicatedChildPosition][1]=2; // Sets child state 2: Processing
+        
+        childCounter = (childCounter + 1 >= PROCESS_POOL_SIZE) ? 0 : childCounter + 1; // Resets child processes pool. If last process, use the first one.
         activeChild = processes[childCounter];
-        msg.type = processes[childCounter];  // Pasar el turno al siguiente hijo
+        msg.type = processes[childCounter]; // Set next children.
         msg.arrayPosition =  childCounter;
-        msgsnd(msqid, (void *)&msg, sizeof(msg.matchesFound), 0);
-        states[childCounter][1]=1;//Pone el estado del hijo (que acaba de poner a leer) en 1: Leyendo
-        //Imprimir coincidencias de los hijos que ya procesaron
+        msgsnd(msqid, (void *)&msg, sizeof(msg.matchesFound), 0); // Sends next process to read
+        states[childCounter][1]=1; // Sets the state of the child that just sent to read in 1: Reading.
+        
+        // Print coincidences from children that finished. 
         msgrcv(msqid, &msg, sizeof(msg.matchesFound), 100,0); 
-        posHijoComunicado=msg.arrayPosition;
-        states[posHijoComunicado][1]=0;//Hijo en estado Disponible
-        //Se debe enviar mensaje al mae para que imprima
-        token = strtok(msg.matchesFound, delimitador);
+        communicatedChildPosition=msg.arrayPosition;
+        states[communicatedChildPosition][1]=0; // Sets child state in 0: Available.
+        token = strtok(msg.matchesFound, delimiter);
         while (token != NULL) {
-            printf("Coincidencia #%d: %s\n", cantidadCoincidencias,token);
-            token = strtok(NULL, delimitador);
-            cantidadCoincidencias++;
+            printf("Coincidence #%d: %s\n", coincidencesFound, token);
+            token = strtok(NULL, delimiter);
+            coincidencesFound++;
         }
     }
-    //Esperar a que los hijos terminen de buscar coincidencias
+
+    // Wait for all children to end finding coincidences.
     while(1){
         sleep(1);
-        if (msgrcv(msqid, &msg, sizeof(msg.matchesFound), 100,IPC_NOWAIT)!=-1){//Si recibe mensaje imprime
-            states[msg.arrayPosition][1]=0;//Hijo en estado Disponible
-            //Se debe enviar mensaje al mae para que imprima
-            token = strtok(msg.matchesFound, delimitador);
+        if (msgrcv(msqid, &msg, sizeof(msg.matchesFound), 100,IPC_NOWAIT)!=-1){ // If receives a message, prints.
+            states[msg.arrayPosition][1]=0; // Children in state 0: Available.
+            token = strtok(msg.matchesFound, delimiter);
             while (token != NULL) {
-                printf("Coincidencia #%d: %s\n", cantidadCoincidencias,token);
-                token = strtok(NULL, delimitador);
-                cantidadCoincidencias++;
+                printf("Coincidence #%d: %s\n", coincidencesFound,token);
+                token = strtok(NULL, delimiter);
+                coincidencesFound++;
             }
         }
-        if (childrenAvailable()==0)//Hijos disponibles implica que ya terminaron de buscar
+        if (childrenAvailable()==0) // All children available means they all ended processing.
             break;
     }
-    //Ciclo para eliminar a los hijos.
+
+    // Delete all children.
     for (int i = 0; i < PROCESS_POOL_SIZE; i++) {
         kill(states[i][2], SIGTERM);
     }
-    msgctl(msqid, IPC_RMID, NULL);  // Eliminar la cola de mensajes
+    msgctl(msqid, IPC_RMID, NULL);  // Delete message queue.
+
+
+    gettimeofday(&end, NULL);
+    seconds = end.tv_sec - start.tv_sec;
+    microseconds = end.tv_usec - start.tv_usec;
+    if (microseconds < 0) {
+        seconds--;
+        microseconds += 1000000;
+    }
+    printf("Execution time: %ld seconds and %ld microseconds.\n", seconds, microseconds);
+
     return 0;
 }
