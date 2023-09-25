@@ -1,5 +1,5 @@
 /**
- * Gerp Proyect. Principios de Sistemas Operativos
+ * Grep Proyect. Principios de Sistemas Operativos
  * 
  * @file MultiProcess.c
  * @author Sebastián Bermúdez Acuña & Felipe Obando Arrieta
@@ -24,7 +24,9 @@
 #define PROCESS_POOL_SIZE 3
 char buffer[READING_BUFFER]; // For file reading
 long processes[PROCESS_POOL_SIZE]; // Save identifier for each process
-long states[PROCESS_POOL_SIZE][3]; // For child processes. pos 0: Child position in array. pos 1: Child state. pos 2: Pid.
+//pos 0: Child position in array. pos 1: Child state. pos 2: Pid.
+long states[PROCESS_POOL_SIZE][3]; // For child processes.
+
 
 // Communication between processes
 struct message {
@@ -46,9 +48,9 @@ int createProcesses() {
         pid = fork();
         if (pid != 0) {
             processes[i] = (long)i + 1;
-            states[i][0]=i;//Pos del hijo en el array.
-            states[i][1]=0;//Estados -> 0: Disponible, 1: Leyendo, 2: Procesando
-            states[i][2]=pid;//Pid hijo
+            states[i][0]=i; //Child position in array.
+            states[i][1]=0; //States -> 0: Available, 1: Reading, 2: Processing
+            states[i][2]=pid; //Child pid
         }
         else 
             return i + 1;
@@ -269,7 +271,7 @@ int main(int argc, char *argv[]) {
         // Change the state of the child that just read 
         states[communicatedChildPosition][1]=2; // Sets child state 2: Processing
         
-        childCounter = (childCounter + 1 >= PROCESS_POOL_SIZE) ? 0 : childCounter + 1; // Resets child processes pool. If last process, use the first one.
+        childCounter = (childCounter + 1 >= PROCESS_POOL_SIZE) ? 0 : childCounter + 1; // Resets child processes pool.
         activeChild = processes[childCounter];
         msg.type = processes[childCounter]; // Set next children.
         msg.arrayPosition =  childCounter;
