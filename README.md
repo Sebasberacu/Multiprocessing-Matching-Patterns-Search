@@ -1,4 +1,4 @@
-# Collaborative Processes in C: Search Project
+# Multiprocessing Matching Patterns Search in C
 This project has as its main objective to implement and evaluate the performance of collaborative task execution using multiple processes in a Unix environment.
 
 ## Project Description
