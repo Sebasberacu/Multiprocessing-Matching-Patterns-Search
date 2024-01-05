@@ -21,7 +21,7 @@ Development of a read function that handles 8K bytes blocks and ensures the inte
 Use of the "regex.h" library to search for regular expression matches in the file.
 
 ## Project Documentation
-A formal documentation of this program can be found in the `doc.pdf`file within this repository. This project was created as a project for a course at my university (Tecnológico de Costa Rica) called 'Principles of Operating Systems', which is the reason why the documentation is in Spanish 😊.
+A formal documentation of this program can be found in the `doc.pdf` file within this repository. This project was created as a project for a course at my university (Tecnológico de Costa Rica) called 'Principles of Operating Systems', which is the reason why the documentation is in Spanish 😊.
 
 In the documentation, clear definitions of the data structures used are presented. Sections detailing the process creation mechanism, the communication between processes and the effective synchronization to coordinate the search in the archive. In addition, the documentation addresses the operation of the file reading and text matching. Lastly, the performance tests provide a quantitative assessment of the impact of the number of processes on program execution time and the result of the program execution.
 
