@@ -24,6 +24,7 @@
 #define PROCESS_POOL_SIZE 3
 char buffer[READING_BUFFER]; // For file reading
 long processes[PROCESS_POOL_SIZE]; // Save identifier for each process
+
 //pos 0: Child position in array. pos 1: Child state. pos 2: Pid.
 long states[PROCESS_POOL_SIZE][3]; // For child processes.
 
